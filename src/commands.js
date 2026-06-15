@@ -52,6 +52,9 @@ export const commands = [
     .setName("ttsstatus")
     .setDescription("Show TTS read-chat settings and the last read-chat event."),
   new SlashCommandBuilder()
+    .setName("ttstest")
+    .setDescription("Speak a test line using the configured default voice."),
+  new SlashCommandBuilder()
     .setName("stop")
     .setDescription("Stop speaking and clear the queue."),
 ].map((command) => command.toJSON());

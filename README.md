@@ -11,6 +11,7 @@ Discord slash-command TTS bot that joins a voice channel, calls ElevenLabs for s
 - `/voices` - show a short list of available ElevenLabs voices.
 - `/readchat enabled channel` - turn on reading messages from a text channel. The bot only reads messages from users currently connected to a voice channel.
 - `/ttsstatus` - show read-chat settings and the last read-chat event.
+- `/ttstest` - speak a test line in your current voice channel.
 - `/stop` - stop the current audio and clear the queue.
 
 ## Local setup
@@ -69,7 +70,7 @@ Run this once in your server:
 /readchat enabled:true channel:#your-text-channel
 ```
 
-After that, when someone types in that text channel, the bot reads the message only if that person is currently inside a voice channel. If someone types in a voice channel's built-in text chat, the bot only reads it when that person is inside that same voice channel. Use this to turn it off:
+Pick a normal text channel for `channel`, not the voice channel chat. After that, when someone types in that text channel, the bot reads the message only if that person is currently inside a voice channel. Use this to turn it off:
 
 ```text
 /readchat enabled:false
@@ -78,10 +79,11 @@ After that, when someone types in that text channel, the bot reads the message o
 If it does not read messages, run:
 
 ```text
+/ttstest
 /ttsstatus
 ```
 
-If the last read-chat event says Discord sent empty content, turn on Message Content Intent in the Discord Developer Portal and restart Railway.
+If `/ttstest` speaks but chat messages do not, the voice/audio path works and the issue is the read channel, Message Content Intent, or bot channel permissions. If the last read-chat event says Discord sent empty content, turn on Message Content Intent in the Discord Developer Portal and restart Railway.
 
 ## ElevenLabs notes
 

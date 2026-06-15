@@ -4,14 +4,14 @@ import {
   AudioPlayerStatus,
   createAudioPlayer,
   createAudioResource,
+  demuxProbe,
   entersState,
   getVoiceConnection,
   joinVoiceChannel,
   NoSubscriberBehavior,
-  StreamType,
   VoiceConnectionStatus,
 } from "@discordjs/voice";
-import { Client, Events, GatewayIntentBits } from "discord.js";
+import { ChannelType, Client, Events, GatewayIntentBits } from "discord.js";
 import ffmpegPath from "ffmpeg-static";
 import { findVoice, listVoices, synthesizeSpeech, voiceAutocomplete } from "./elevenlabs.js";
 import {
@@ -136,10 +136,18 @@ async function playNext(guildId) {
   }
 
   state.playing = true;
-  const resource = createAudioResource(Readable.from(item.audio), {
-    inputType: StreamType.Arbitrary,
-  });
-  state.player.play(resource);
+
+  try {
+    const probe = await demuxProbe(Readable.from(item.audio));
+    const resource = createAudioResource(probe.stream, {
+      inputType: probe.type,
+    });
+    state.player.play(resource);
+  } catch (error) {
+    console.error(`Could not create audio resource in guild ${guildId}:`, error);
+    state.playing = false;
+    void playNext(guildId);
+  }
 }
 
 async function enqueueSpeech(interaction, text, voiceInput) {
@@ -255,6 +263,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const enabled = interaction.options.getBoolean("enabled", true);
       const selectedChannel = interaction.options.getChannel("channel", false);
       const readChannelId = selectedChannel?.id ?? interaction.channelId;
+
+      if (enabled && selectedChannel?.type !== ChannelType.GuildText) {
+        await interaction.reply({
+          content: "Pick a normal text channel for `channel`, not a voice channel.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      if (enabled && !selectedChannel && interaction.channel?.type !== ChannelType.GuildText) {
+        await interaction.reply({
+          content: "Run this in a normal text channel, or use `channel:#your-text-channel`.",
+          ephemeral: true,
+        });
+        return;
+      }
+
       await setReadChatEnabled(interaction.guildId, enabled, readChannelId);
       const defaultVoice = getGuildVoice(interaction.guildId);
       await interaction.reply({
@@ -263,6 +288,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
           : "Voice text chat reading is off.",
         ephemeral: true,
       });
+      return;
+    }
+
+    if (interaction.commandName === "ttstest") {
+      await interaction.deferReply({ ephemeral: true });
+      const voice = await enqueueSpeech(
+        interaction,
+        "TTS test is working. I can speak in this voice channel.",
+        null,
+      );
+      await interaction.editReply(`Queued a test line with ${voice.name}.`);
       return;
     }
 
@@ -327,9 +363,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 client.on(Events.MessageCreate, async (message) => {
   try {
-    if (!message.inGuild() || message.author.bot || !isReadChatEnabled(message.guildId)) {
+    if (!message.inGuild() || message.author.bot) {
       return;
     }
+
+    if (!isReadChatEnabled(message.guildId)) {
+      return;
+    }
+
+    updateReadChatDiagnostics(message.guildId, {
+      channelId: message.channelId,
+      reason: "saw a guild message while read chat was on",
+    });
 
     const member = await message.guild.members.fetch(message.author.id);
     const configuredTextChannelId = getReadChatChannel(message.guildId);
@@ -338,6 +383,10 @@ client.on(Events.MessageCreate, async (message) => {
     const isConfiguredTextChannel = configuredTextChannelId === message.channelId;
 
     if (!isVoiceChannelTextChat && !isConfiguredTextChannel) {
+      updateReadChatDiagnostics(message.guildId, {
+        channelId: message.channelId,
+        reason: "ignored because this is not the configured read channel",
+      });
       return;
     }
 
