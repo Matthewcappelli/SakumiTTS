@@ -1,0 +1,66 @@
+# Railway ElevenLabs TTS Discord Bot
+
+Discord slash-command TTS bot that joins a voice channel, calls ElevenLabs for speech, and plays the generated audio. Voice selection is built in through Discord autocomplete.
+
+## Commands
+
+- `/join` - join your current voice channel.
+- `/leave` - disconnect from voice.
+- `/say text voice` - speak text with an optional ElevenLabs voice. The `voice` option autocompletes from your ElevenLabs account.
+- `/setvoice voice` - save a default voice for the server.
+- `/voices` - show a short list of available ElevenLabs voices.
+- `/stop` - stop the current audio and clear the queue.
+
+## Local setup
+
+1. Copy `.env.example` to `.env`.
+2. Fill in `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, and `ELEVENLABS_API_KEY`.
+3. Optional: set `DISCORD_GUILD_ID` to one test server for instant slash-command updates.
+4. Install and deploy commands:
+
+```bash
+npm install
+npm run deploy:commands
+npm start
+```
+
+## Railway setup
+
+1. Push this folder to GitHub.
+2. Create a Railway service from the repo.
+3. Add these variables in Railway:
+
+```text
+DISCORD_TOKEN
+DISCORD_CLIENT_ID
+ELEVENLABS_API_KEY
+```
+
+Optional Railway variables:
+
+```text
+DISCORD_GUILD_ID
+ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128
+MAX_TTS_CHARS=500
+```
+
+Railway will run:
+
+```bash
+npm run deploy:commands && npm start
+```
+
+## Discord bot permissions
+
+In the Discord Developer Portal, enable these bot settings:
+
+- Server Members Intent is not required.
+- Message Content Intent is not required.
+- Add the bot with `applications.commands`, `bot`, `Connect`, and `Speak`.
+
+## ElevenLabs notes
+
+The bot uses the current ElevenLabs REST API: `GET /v2/voices` to populate choices and `POST /v1/text-to-speech/:voice_id` to generate audio. Your API key controls which voices are available.
+
+If autocomplete cannot reach ElevenLabs, you can paste a raw `voice_id` into the `voice` option.
