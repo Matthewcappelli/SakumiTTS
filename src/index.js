@@ -16,6 +16,7 @@ import ffmpegPath from "ffmpeg-static";
 import { findVoice, listVoices, synthesizeSpeech, voiceAutocomplete } from "./elevenlabs.js";
 import {
   getGuildVoice,
+  getReadChatChannel,
   isReadChatEnabled,
   loadStore,
   setGuildVoice,
@@ -43,6 +44,7 @@ const client = new Client({
 });
 
 const guildAudio = new Map();
+const missingVoiceWarnings = new Set();
 
 function getAudioState(guildId) {
   let state = guildAudio.get(guildId);
@@ -163,6 +165,11 @@ async function enqueueVoiceChannelSpeech(guild, voiceChannel, text) {
   const chosenVoice = await findVoice(defaultVoice);
 
   if (!chosenVoice) {
+    if (!missingVoiceWarnings.has(guild.id)) {
+      console.warn(`Read chat is enabled in guild ${guild.id}, but no default voice is set.`);
+      missingVoiceWarnings.add(guild.id);
+    }
+
     return null;
   }
 
@@ -238,10 +245,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.commandName === "readchat") {
       const enabled = interaction.options.getBoolean("enabled", true);
-      await setReadChatEnabled(interaction.guildId, enabled);
+      await setReadChatEnabled(interaction.guildId, enabled, interaction.channelId);
+      const defaultVoice = getGuildVoice(interaction.guildId);
       await interaction.reply({
         content: enabled
-          ? "Voice text chat reading is on. I will only read messages from people in that same voice channel."
+          ? `Read chat is on for <#${interaction.channelId}>. I will only read messages from people who are in a voice channel.${defaultVoice ? "" : " Set a default voice with `/setvoice` before testing."}`
           : "Voice text chat reading is off.",
         ephemeral: true,
       });
@@ -290,23 +298,36 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    if (!message.channel.isVoiceBased()) {
+    const member = await message.guild.members.fetch(message.author.id);
+    const configuredTextChannelId = getReadChatChannel(message.guildId);
+    const isVoiceChannelTextChat =
+      typeof message.channel.isVoiceBased === "function" && message.channel.isVoiceBased();
+    const isConfiguredTextChannel = configuredTextChannelId === message.channelId;
+
+    if (!isVoiceChannelTextChat && !isConfiguredTextChannel) {
       return;
     }
 
-    const member = await message.guild.members.fetch(message.author.id);
+    const targetVoiceChannel = isVoiceChannelTextChat ? message.channel : member.voice.channel;
 
-    if (member.voice.channelId !== message.channelId) {
+    if (!targetVoiceChannel) {
+      return;
+    }
+
+    if (isVoiceChannelTextChat && member.voice.channelId !== message.channelId) {
       return;
     }
 
     const text = message.cleanContent.trim();
 
     if (!text) {
+      console.warn(
+        `Read chat saw a message in guild ${message.guildId}, but content was empty. Check Message Content Intent.`,
+      );
       return;
     }
 
-    await enqueueVoiceChannelSpeech(message.guild, message.channel, text);
+    await enqueueVoiceChannelSpeech(message.guild, targetVoiceChannel, text);
   } catch (error) {
     console.error("Could not read voice text chat message:", error);
   }

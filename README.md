@@ -9,7 +9,7 @@ Discord slash-command TTS bot that joins a voice channel, calls ElevenLabs for s
 - `/say text voice` - speak text with an optional ElevenLabs voice. The `voice` option autocompletes from your ElevenLabs account.
 - `/setvoice voice` - save a default voice for the server.
 - `/voices` - show a short list of available ElevenLabs voices.
-- `/readchat enabled` - turn on reading messages from voice channel text chat. The bot only reads messages from users currently connected to that same voice channel.
+- `/readchat enabled` - turn on reading messages from the channel where you run the command. The bot only reads messages from users currently connected to a voice channel.
 - `/stop` - stop the current audio and clear the queue.
 
 ## Local setup
@@ -68,7 +68,7 @@ Run this once in your server:
 /readchat enabled:true
 ```
 
-After that, when someone types in a voice channel's built-in text chat, the bot reads the message only if that person is currently inside that same voice channel. Use this to turn it off:
+After that, when someone types in that text channel, the bot reads the message only if that person is currently inside a voice channel. If someone types in a voice channel's built-in text chat, the bot only reads it when that person is inside that same voice channel. Use this to turn it off:
 
 ```text
 /readchat enabled:false

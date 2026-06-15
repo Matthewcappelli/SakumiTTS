@@ -6,6 +6,7 @@ const STORE_PATH = path.join(DATA_DIR, "voice-settings.json");
 
 let state = {
   guildDefaults: {},
+  readChatChannels: {},
   readChatEnabled: {},
 };
 
@@ -31,13 +32,22 @@ export function isReadChatEnabled(guildId) {
   return state.readChatEnabled[guildId] ?? false;
 }
 
+export function getReadChatChannel(guildId) {
+  return state.readChatChannels[guildId] ?? null;
+}
+
 export async function setGuildVoice(guildId, voiceId) {
   state.guildDefaults[guildId] = voiceId;
   await saveStore();
 }
 
-export async function setReadChatEnabled(guildId, enabled) {
+export async function setReadChatEnabled(guildId, enabled, channelId = null) {
   state.readChatEnabled[guildId] = enabled;
+
+  if (enabled && channelId) {
+    state.readChatChannels[guildId] = channelId;
+  }
+
   await saveStore();
 }
 
