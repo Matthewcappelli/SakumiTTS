@@ -90,3 +90,5 @@ If `/ttstest` speaks but chat messages do not, the voice/audio path works and th
 The bot uses the current ElevenLabs REST API: `GET /v2/voices` to populate choices and `POST /v1/text-to-speech/:voice_id` to generate audio. Your API key controls which voices are available.
 
 If autocomplete cannot reach ElevenLabs, you can paste a raw `voice_id` into the `voice` option.
+
+Free ElevenLabs plans may not be allowed to use library voices through the API. If Railway logs show `paid_plan_required`, choose a non-library voice from your account or upgrade ElevenLabs.

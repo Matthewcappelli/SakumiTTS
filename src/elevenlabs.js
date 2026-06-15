@@ -25,10 +25,32 @@ async function elevenFetch(path, options = {}) {
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(`ElevenLabs API ${response.status}: ${detail || response.statusText}`);
+    const message = getElevenLabsErrorMessage(response.status, detail);
+    throw new Error(message);
   }
 
   return response;
+}
+
+function getElevenLabsErrorMessage(status, detail) {
+  try {
+    const parsed = JSON.parse(detail);
+    const error = parsed.detail ?? parsed;
+    const code = error.code ?? parsed.code;
+    const message = error.message ?? parsed.message;
+
+    if (status === 402 || code === "paid_plan_required") {
+      return "ElevenLabs rejected that voice because it requires a paid plan. Pick a non-library voice from your account, or upgrade ElevenLabs.";
+    }
+
+    if (message) {
+      return `ElevenLabs API ${status}: ${message}`;
+    }
+  } catch {
+    // Fall back to the raw response below.
+  }
+
+  return `ElevenLabs API ${status}: ${detail || "request failed"}`;
 }
 
 export async function listVoices({ force = false } = {}) {

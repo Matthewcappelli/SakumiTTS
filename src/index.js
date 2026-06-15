@@ -249,7 +249,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const voices = await listVoices({ force: true });
       const sample = voices
         .slice(0, 15)
-        .map((voice) => `- ${voice.name} (${voice.category})`)
+        .map((voice) => {
+          const note = voice.category === "library" ? " - may require paid plan" : "";
+          return `- ${voice.name} (${voice.category})${note}`;
+        })
         .join("\n");
       await interaction.editReply(
         voices.length > 0
