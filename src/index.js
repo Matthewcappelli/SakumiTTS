@@ -246,18 +246,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.commandName === "voices") {
       await interaction.deferReply({ ephemeral: true });
-      const voices = await listVoices({ force: true });
+      const search = interaction.options.getString("search", false) ?? "";
+      const voices = await listVoices({ force: true, search });
       const sample = voices
-        .slice(0, 15)
+        .slice(0, 20)
         .map((voice) => {
-          const note = voice.category === "library" ? " - may require paid plan" : "";
-          return `- ${voice.name} (${voice.category})${note}`;
+          const source = voice.source === "shared" ? "shared library" : voice.category;
+          const note = voice.source === "shared" || voice.category === "library" ? " - may require paid plan" : "";
+          return `- ${voice.name} (${source})${note}`;
         })
         .join("\n");
       await interaction.editReply(
         voices.length > 0
-          ? `Found ${voices.length} voices. Start typing in a voice option to search.\n${sample}`
-          : "No ElevenLabs voices were returned for this API key.",
+          ? `Found ${voices.length} voices${search ? ` for "${search}"` : ""}. Start typing in a voice option to search all account and shared voices.\n${sample}`
+          : `No ElevenLabs voices were returned${search ? ` for "${search}"` : ""}.`,
       );
       return;
     }

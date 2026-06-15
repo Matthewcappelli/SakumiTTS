@@ -31,7 +31,13 @@ export const commands = [
     .addStringOption((option) => voiceOption(option).setRequired(true)),
   new SlashCommandBuilder()
     .setName("voices")
-    .setDescription("List available ElevenLabs voices."),
+    .setDescription("List available ElevenLabs voices.")
+    .addStringOption((option) =>
+      option
+        .setName("search")
+        .setDescription("Search ElevenLabs account and shared voices")
+        .setRequired(false),
+    ),
   new SlashCommandBuilder()
     .setName("readchat")
     .setDescription("Read messages from voice channel text chat.")

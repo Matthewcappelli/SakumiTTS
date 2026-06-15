@@ -8,7 +8,7 @@ Discord slash-command TTS bot that joins a voice channel, calls ElevenLabs for s
 - `/leave` - disconnect from voice.
 - `/say text voice` - speak text with an optional ElevenLabs voice. The `voice` option autocompletes from your ElevenLabs account.
 - `/setvoice voice` - save a default voice for the server.
-- `/voices` - show a short list of available ElevenLabs voices.
+- `/voices search` - show account voices and shared ElevenLabs library voices.
 - `/readchat enabled channel` - turn on reading messages from a text channel. The bot only reads messages from users currently connected to a voice channel.
 - `/ttsstatus` - show read-chat settings and the last read-chat event.
 - `/ttstest` - speak a test line in your current voice channel.
@@ -87,8 +87,8 @@ If `/ttstest` speaks but chat messages do not, the voice/audio path works and th
 
 ## ElevenLabs notes
 
-The bot uses the current ElevenLabs REST API: `GET /v2/voices` to populate choices and `POST /v1/text-to-speech/:voice_id` to generate audio. Your API key controls which voices are available.
+The bot uses the current ElevenLabs REST API: `GET /v2/voices` and `GET /v1/shared-voices` to populate choices, then `POST /v1/text-to-speech/:voice_id` to generate audio. Your API key and ElevenLabs plan control which voices can actually be used for speech.
 
 If autocomplete cannot reach ElevenLabs, you can paste a raw `voice_id` into the `voice` option.
 
-Free ElevenLabs plans may not be allowed to use library voices through the API. If Railway logs show `paid_plan_required`, choose a non-library voice from your account or upgrade ElevenLabs.
+Autocomplete searches both your account voices and shared ElevenLabs voices. Free ElevenLabs plans may not be allowed to use shared/library voices through the API. If Railway logs show `paid_plan_required`, choose a non-library voice from your account or upgrade ElevenLabs.

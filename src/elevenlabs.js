@@ -5,6 +5,7 @@ const VOICE_CACHE_MS = 5 * 60 * 1000;
 
 let cachedVoices = [];
 let cachedAt = 0;
+const sharedVoiceCache = new Map();
 
 function getApiKey() {
   const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -53,7 +54,26 @@ function getElevenLabsErrorMessage(status, detail) {
   return `ElevenLabs API ${status}: ${detail || "request failed"}`;
 }
 
-export async function listVoices({ force = false } = {}) {
+export async function listVoices({ force = false, search = "" } = {}) {
+  const [accountVoices, sharedVoices] = await Promise.all([
+    listAccountVoices({ force }),
+    listSharedVoices({ force, search }),
+  ]);
+
+  const seen = new Set();
+  return [...accountVoices, ...sharedVoices]
+    .filter((voice) => {
+      if (seen.has(voice.id)) {
+        return false;
+      }
+
+      seen.add(voice.id);
+      return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function listAccountVoices({ force = false } = {}) {
   if (!force && cachedVoices.length > 0 && Date.now() - cachedAt < VOICE_CACHE_MS) {
     return cachedVoices;
   }
@@ -68,11 +88,52 @@ export async function listVoices({ force = false } = {}) {
       name: voice.name,
       category: voice.category ?? "voice",
       description: voice.description ?? "",
+      source: "account",
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
   cachedAt = Date.now();
 
   return cachedVoices;
+}
+
+async function listSharedVoices({ force = false, search = "" } = {}) {
+  const normalizedSearch = search.trim().toLowerCase();
+  const cacheKey = normalizedSearch || "__trending__";
+  const cached = sharedVoiceCache.get(cacheKey);
+
+  if (!force && cached && Date.now() - cached.cachedAt < VOICE_CACHE_MS) {
+    return cached.voices;
+  }
+
+  const searchParams = new URLSearchParams({
+    page_size: "100",
+    sort: normalizedSearch ? "usage_character_count_1y" : "trending",
+  });
+
+  if (normalizedSearch) {
+    searchParams.set("search", normalizedSearch);
+  }
+
+  const response = await elevenFetch(`/v1/shared-voices?${searchParams}`);
+  const data = await response.json();
+  const voices = (data.voices ?? [])
+    .filter((voice) => voice.voice_id && voice.name)
+    .map((voice) => ({
+      id: voice.voice_id,
+      name: voice.name,
+      category: "shared",
+      description: voice.description ?? "",
+      labels: voice.labels ?? {},
+      publicOwnerId: voice.public_owner_id ?? voice.public_user_id ?? null,
+      source: "shared",
+    }));
+
+  sharedVoiceCache.set(cacheKey, {
+    cachedAt: Date.now(),
+    voices,
+  });
+
+  return voices;
 }
 
 export async function findVoice(input) {
@@ -81,7 +142,7 @@ export async function findVoice(input) {
   }
 
   const normalized = input.trim().toLowerCase();
-  const voices = await listVoices();
+  const voices = await listVoices({ search: normalized });
 
   return (
     voices.find((voice) => voice.id === input.trim()) ??
@@ -93,7 +154,7 @@ export async function findVoice(input) {
 
 export async function voiceAutocomplete(focusedValue) {
   const normalized = focusedValue.toLowerCase();
-  const voices = await listVoices();
+  const voices = await listVoices({ search: normalized });
 
   return voices
     .filter((voice) => {
@@ -104,7 +165,7 @@ export async function voiceAutocomplete(focusedValue) {
     })
     .slice(0, 25)
     .map((voice) => ({
-      name: `${voice.name} (${voice.category})`.slice(0, 100),
+      name: `${voice.name} (${voice.source === "shared" ? "shared" : voice.category})`.slice(0, 100),
       value: voice.id,
     }));
 }
