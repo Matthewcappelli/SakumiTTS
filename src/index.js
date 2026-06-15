@@ -14,7 +14,13 @@ import {
 import { Client, Events, GatewayIntentBits } from "discord.js";
 import ffmpegPath from "ffmpeg-static";
 import { findVoice, listVoices, synthesizeSpeech, voiceAutocomplete } from "./elevenlabs.js";
-import { getGuildVoice, loadStore, setGuildVoice } from "./store.js";
+import {
+  getGuildVoice,
+  isReadChatEnabled,
+  loadStore,
+  setGuildVoice,
+  setReadChatEnabled,
+} from "./store.js";
 
 if (ffmpegPath) {
   process.env.FFMPEG_PATH = ffmpegPath;
@@ -28,7 +34,12 @@ if (!DISCORD_TOKEN) {
 }
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 const guildAudio = new Map();
@@ -66,15 +77,13 @@ function getAudioState(guildId) {
   return state;
 }
 
-async function ensureConnection(interaction) {
-  const member = await interaction.guild.members.fetch(interaction.user.id);
-  const voiceChannel = member.voice.channel;
+async function ensureConnectionForChannel(voiceChannel) {
+  let connection = getVoiceConnection(voiceChannel.guild.id);
 
-  if (!voiceChannel) {
-    throw new Error("Join a voice channel first.");
+  if (connection && connection.joinConfig.channelId !== voiceChannel.id) {
+    connection.destroy();
+    connection = null;
   }
-
-  let connection = getVoiceConnection(interaction.guildId);
 
   if (!connection) {
     connection = joinVoiceChannel({
@@ -85,10 +94,21 @@ async function ensureConnection(interaction) {
     });
   }
 
-  connection.subscribe(getAudioState(interaction.guildId).player);
+  connection.subscribe(getAudioState(voiceChannel.guild.id).player);
   await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
 
   return connection;
+}
+
+async function ensureConnection(interaction) {
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+  const voiceChannel = member.voice.channel;
+
+  if (!voiceChannel) {
+    throw new Error("Join a voice channel first.");
+  }
+
+  return ensureConnectionForChannel(voiceChannel);
 }
 
 async function playNext(guildId) {
@@ -130,6 +150,28 @@ async function enqueueSpeech(interaction, text, voiceInput) {
   const state = getAudioState(interaction.guildId);
   state.queue.push({ audio, voice: chosenVoice });
   await playNext(interaction.guildId);
+
+  return chosenVoice;
+}
+
+async function enqueueVoiceChannelSpeech(guild, voiceChannel, text) {
+  if (text.length > MAX_TTS_CHARS) {
+    return null;
+  }
+
+  const defaultVoice = getGuildVoice(guild.id);
+  const chosenVoice = await findVoice(defaultVoice);
+
+  if (!chosenVoice) {
+    return null;
+  }
+
+  await ensureConnectionForChannel(voiceChannel);
+
+  const audio = await synthesizeSpeech(text, chosenVoice.id);
+  const state = getAudioState(guild.id);
+  state.queue.push({ audio, voice: chosenVoice });
+  await playNext(guild.id);
 
   return chosenVoice;
 }
@@ -194,6 +236,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
+    if (interaction.commandName === "readchat") {
+      const enabled = interaction.options.getBoolean("enabled", true);
+      await setReadChatEnabled(interaction.guildId, enabled);
+      await interaction.reply({
+        content: enabled
+          ? "Voice text chat reading is on. I will only read messages from people in that same voice channel."
+          : "Voice text chat reading is off.",
+        ephemeral: true,
+      });
+      return;
+    }
+
     if (interaction.commandName === "setvoice") {
       await interaction.deferReply({ ephemeral: true });
       const voiceInput = interaction.options.getString("voice", true);
@@ -227,6 +281,34 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.reply({ content, ephemeral: true }).catch(() => null);
       }
     }
+  }
+});
+
+client.on(Events.MessageCreate, async (message) => {
+  try {
+    if (!message.inGuild() || message.author.bot || !isReadChatEnabled(message.guildId)) {
+      return;
+    }
+
+    if (!message.channel.isVoiceBased()) {
+      return;
+    }
+
+    const member = await message.guild.members.fetch(message.author.id);
+
+    if (member.voice.channelId !== message.channelId) {
+      return;
+    }
+
+    const text = message.cleanContent.trim();
+
+    if (!text) {
+      return;
+    }
+
+    await enqueueVoiceChannelSpeech(message.guild, message.channel, text);
+  } catch (error) {
+    console.error("Could not read voice text chat message:", error);
   }
 });
 

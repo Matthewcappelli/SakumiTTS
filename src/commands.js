@@ -33,6 +33,15 @@ export const commands = [
     .setName("voices")
     .setDescription("List available ElevenLabs voices."),
   new SlashCommandBuilder()
+    .setName("readchat")
+    .setDescription("Read messages from voice channel text chat.")
+    .addBooleanOption((option) =>
+      option
+        .setName("enabled")
+        .setDescription("Turn voice text chat reading on or off")
+        .setRequired(true),
+    ),
+  new SlashCommandBuilder()
     .setName("stop")
     .setDescription("Stop speaking and clear the queue."),
 ].map((command) => command.toJSON());
