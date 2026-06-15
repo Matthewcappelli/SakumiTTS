@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from "discord.js";
+import { ChannelType, SlashCommandBuilder } from "discord.js";
 
 const voiceOption = (option) =>
   option
@@ -40,7 +40,17 @@ export const commands = [
         .setName("enabled")
         .setDescription("Turn voice text chat reading on or off")
         .setRequired(true),
+    )
+    .addChannelOption((option) =>
+      option
+        .setName("channel")
+        .setDescription("Text channel to read from")
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false),
     ),
+  new SlashCommandBuilder()
+    .setName("ttsstatus")
+    .setDescription("Show TTS read-chat settings and the last read-chat event."),
   new SlashCommandBuilder()
     .setName("stop")
     .setDescription("Stop speaking and clear the queue."),

@@ -45,6 +45,14 @@ const client = new Client({
 
 const guildAudio = new Map();
 const missingVoiceWarnings = new Set();
+const readChatDiagnostics = new Map();
+
+function updateReadChatDiagnostics(guildId, details) {
+  readChatDiagnostics.set(guildId, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
 
 function getAudioState(guildId) {
   let state = guildAudio.get(guildId);
@@ -245,14 +253,39 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.commandName === "readchat") {
       const enabled = interaction.options.getBoolean("enabled", true);
-      await setReadChatEnabled(interaction.guildId, enabled, interaction.channelId);
+      const selectedChannel = interaction.options.getChannel("channel", false);
+      const readChannelId = selectedChannel?.id ?? interaction.channelId;
+      await setReadChatEnabled(interaction.guildId, enabled, readChannelId);
       const defaultVoice = getGuildVoice(interaction.guildId);
       await interaction.reply({
         content: enabled
-          ? `Read chat is on for <#${interaction.channelId}>. I will only read messages from people who are in a voice channel.${defaultVoice ? "" : " Set a default voice with `/setvoice` before testing."}`
+          ? `Read chat is on for <#${readChannelId}>. I will only read messages from people who are in a voice channel.${defaultVoice ? "" : " Set a default voice with `/setvoice` before testing."}`
           : "Voice text chat reading is off.",
         ephemeral: true,
       });
+      return;
+    }
+
+    if (interaction.commandName === "ttsstatus") {
+      const readEnabled = isReadChatEnabled(interaction.guildId);
+      const readChannelId = getReadChatChannel(interaction.guildId);
+      const defaultVoiceId = getGuildVoice(interaction.guildId);
+      const defaultVoice = defaultVoiceId ? await findVoice(defaultVoiceId).catch(() => null) : null;
+      const connection = getVoiceConnection(interaction.guildId);
+      const diagnostic = readChatDiagnostics.get(interaction.guildId);
+      const lines = [
+        `Read chat: ${readEnabled ? "on" : "off"}`,
+        `Read channel: ${readChannelId ? `<#${readChannelId}>` : "not set"}`,
+        `Default voice: ${defaultVoice?.name ?? (defaultVoiceId ? defaultVoiceId : "not set")}`,
+        `Voice connection: ${connection ? `connected to <#${connection.joinConfig.channelId}>` : "not connected"}`,
+        `Last read-chat event: ${
+          diagnostic
+            ? `${diagnostic.reason} (${diagnostic.at})${diagnostic.channelId ? ` in <#${diagnostic.channelId}>` : ""}`
+            : "none seen since this restart"
+        }`,
+      ];
+
+      await interaction.reply({ content: lines.join("\n"), ephemeral: true });
       return;
     }
 
@@ -311,23 +344,39 @@ client.on(Events.MessageCreate, async (message) => {
     const targetVoiceChannel = isVoiceChannelTextChat ? message.channel : member.voice.channel;
 
     if (!targetVoiceChannel) {
+      updateReadChatDiagnostics(message.guildId, {
+        channelId: message.channelId,
+        reason: "ignored because the author was not in a voice channel",
+      });
       return;
     }
 
     if (isVoiceChannelTextChat && member.voice.channelId !== message.channelId) {
+      updateReadChatDiagnostics(message.guildId, {
+        channelId: message.channelId,
+        reason: "ignored because the author was not in that voice channel",
+      });
       return;
     }
 
     const text = message.cleanContent.trim();
 
     if (!text) {
+      updateReadChatDiagnostics(message.guildId, {
+        channelId: message.channelId,
+        reason: "saw a message, but Discord sent empty content",
+      });
       console.warn(
         `Read chat saw a message in guild ${message.guildId}, but content was empty. Check Message Content Intent.`,
       );
       return;
     }
 
-    await enqueueVoiceChannelSpeech(message.guild, targetVoiceChannel, text);
+    const voice = await enqueueVoiceChannelSpeech(message.guild, targetVoiceChannel, text);
+    updateReadChatDiagnostics(message.guildId, {
+      channelId: message.channelId,
+      reason: voice ? `queued message with ${voice.name}` : "saw text but no default voice is set",
+    });
   } catch (error) {
     console.error("Could not read voice text chat message:", error);
   }
